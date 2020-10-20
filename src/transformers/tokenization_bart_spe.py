@@ -61,7 +61,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class T5Tokenizer(PreTrainedTokenizer):
+class BartSPETokenizer(PreTrainedTokenizer):
     """
     Construct a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
 
@@ -72,6 +72,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         vocab_file (:obj:`str`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
 
@@ -84,12 +86,6 @@ class T5Tokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        extra_ids (:obj:`int`, `optional`, defaults to 100):
-            Add a number of extra ids added to the end of the vocabulary for use as sentinels.
-            These tokens are accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1.
-            Extra tokens are indexed from the end of the vocabulary up to beginnning ("<extra_id_0>" is the last token
-            in the vocabulary like in T5 preprocessing see `here
-            <https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117>`__).
         additional_special_tokens (:obj:`List[str]`, `optional`):
             Additional special tokens used by the tokenizer.
     """
@@ -102,20 +98,16 @@ class T5Tokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
+        bos_token="<s>",
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        extra_ids=100,
         additional_special_tokens=None,
         **kwargs
     ):
-        # Add extra_ids to the special token list
-        if extra_ids > 0:
-            if additional_special_tokens is None:
-                additional_special_tokens = []
-            additional_special_tokens.extend(["<extra_id_{}>".format(i) for i in range(extra_ids)])
 
         super().__init__(
+            bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
@@ -134,14 +126,13 @@ class T5Tokenizer(PreTrainedTokenizer):
             raise
 
         self.vocab_file = vocab_file
-        self._extra_ids = extra_ids
 
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
 
     @property
     def vocab_size(self):
-        return self.sp_model.get_piece_size() + self._extra_ids
+        return self.sp_model.get_piece_size()
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -243,18 +234,11 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-        if token.startswith("<extra_id_"):
-            match = re.match(r"<extra_id_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1
         return self.sp_model.piece_to_id(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index < self.sp_model.get_piece_size():
-            token = self.sp_model.IdToPiece(index)
-        else:
-            token = "<extra_id_{}>".format(self.vocab_size - 1 - index)
+        token = self.sp_model.IdToPiece(index)
         return token
 
     def convert_tokens_to_string(self, tokens):
