@@ -151,6 +151,7 @@ from .retrieval_rag import RagRetriever
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, BartTokenizerFast
+from .tokenization_bart_spm import BartSPMTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_generation import BertGenerationTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer

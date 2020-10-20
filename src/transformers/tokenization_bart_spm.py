@@ -61,7 +61,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class BartSPETokenizer(PreTrainedTokenizer):
+class BartSPMTokenizer(PreTrainedTokenizer):
     """
     Construct a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
 
@@ -86,8 +86,6 @@ class BartSPETokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        additional_special_tokens (:obj:`List[str]`, `optional`):
-            Additional special tokens used by the tokenizer.
 
     Note:
         According to fairseq, token2idx mapping is:
@@ -124,7 +122,6 @@ class BartSPETokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        additional_special_tokens=None,
         **kwargs
     ):
 
@@ -133,7 +130,6 @@ class BartSPETokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
