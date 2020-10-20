@@ -88,6 +88,22 @@ class BartSPETokenizer(PreTrainedTokenizer):
             The token used for padding, for example when batching sequences of different lengths.
         additional_special_tokens (:obj:`List[str]`, `optional`):
             Additional special tokens used by the tokenizer.
+
+    Note:
+        According to fairseq, token2idx mapping is:
+        <s>   → 0
+        <pad> → 1
+        </s>  → 2
+        <unk> → 3
+        ▁の  -> 4
+
+        According to sentencepiece, token2idx mapping is:
+        <unk> → 0
+        <s> → 1
+        </s> → 2
+        ▁の -> 3
+
+        This must be handled.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
