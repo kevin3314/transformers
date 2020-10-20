@@ -102,6 +102,7 @@ class BartSPMTokenizer(PreTrainedTokenizer):
         ▁の -> 3
 
         This must be handled.
+        Currently, encode method works wrongly. Use convert_ids_to_tokens/tokens_to_ids
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
