@@ -110,6 +110,12 @@ class BartSPETokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
+    id_spm2fairseq_map = {
+        0: 3,
+        1: 0,
+        2: 2
+    }
+    id_fairseq2spm_map = {value: key for key, value in id_spm2fairseq_map.items()}
 
     def __init__(
         self,
@@ -250,11 +256,14 @@ class BartSPETokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-        return self.sp_model.piece_to_id(token)
+        idx = self.sp_model.piece_to_id(token)
+        # If not included in map, then increment
+        return self.id_spm2fairseq_map.get(idx, idx + 1)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        token = self.sp_model.IdToPiece(index)
+        fairseq_idx = self.id_fairseq2spm_map.get(index, index - 1)
+        token = self.sp_model.IdToPiece(fairseq_idx)
         return token
 
     def convert_tokens_to_string(self, tokens):
