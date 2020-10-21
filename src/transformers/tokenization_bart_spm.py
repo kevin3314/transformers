@@ -148,7 +148,7 @@ class BartSPMTokenizer(PreTrainedTokenizer):
             raise
 
         self.vocab_file = vocab_file
-        self.pad_id = pad_id
+        self._pad_id = pad_id
 
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
@@ -156,6 +156,10 @@ class BartSPMTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         return self.sp_model.get_piece_size()
+
+    @property
+    def pad_id(self):
+        return self._pad_id
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
