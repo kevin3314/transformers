@@ -115,6 +115,8 @@ class BartSPMTokenizer(PreTrainedTokenizer):
         2: 2
     }
     id_fairseq2spm_map = {value: key for key, value in id_spm2fairseq_map.items()}
+    # For now, map <pad> to <unk>
+    id_fairseq2spm_map[1] = 0
 
     def __init__(
         self,
@@ -123,6 +125,7 @@ class BartSPMTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        pad_id=1,
         **kwargs
     ):
 
@@ -145,6 +148,7 @@ class BartSPMTokenizer(PreTrainedTokenizer):
             raise
 
         self.vocab_file = vocab_file
+        self.pad_id = pad_id
 
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
@@ -253,6 +257,9 @@ class BartSPMTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
+        # Handle pad
+        if token == self.pad_token:
+            return self.pad_id
         idx = self.sp_model.piece_to_id(token)
         # If not included in map, then increment
         return self.id_spm2fairseq_map.get(idx, idx + 1)
