@@ -1,4 +1,17 @@
 #!/usr/bin/env python
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import argparse
 import shutil
@@ -42,8 +55,7 @@ def eval_data_dir(
     task="summarization",
     local_rank=None,
     num_return_sequences=1,
-    src_lang=None,
-    tgt_lang=None,
+    dataset_kwargs: Dict = None,
     prefix="",
     **generate_kwargs,
 ) -> Dict:
@@ -78,9 +90,8 @@ def eval_data_dir(
         max_target_length=1024,
         type_path=type_path,
         n_obs=n_obs,
-        src_lang=src_lang,
-        tgt_lang=tgt_lang,
         prefix=prefix,
+        **dataset_kwargs,
     )
     # I set shuffle=True for a more accurate progress bar.
     # If all the longest samples are first, the prog bar estimate is too high at the beginning.
@@ -158,6 +169,11 @@ def run_generate():
     if intermediate_files:
         raise ValueError(f"Found files at {json_save_dir} please move or remove them.")
         # In theory, a node could finish and save before another node hits this. If this happens, we can address later.
+    dataset_kwargs = {}
+    if args.src_lang is not None:
+        dataset_kwargs["src_lang"] = args.src_lang
+    if args.tgt_lang is not None:
+        dataset_kwargs["tgt_lang"] = args.tgt_lang
 
     Path(args.save_dir).mkdir(exist_ok=True)
     results, num_replicas = eval_data_dir(
@@ -173,8 +189,7 @@ def run_generate():
         max_source_length=args.max_source_length,
         num_return_sequences=args.num_return_sequences,
         prefix=args.prefix,
-        src_lang=args.src_lang,
-        tgt_lang=args.tgt_lang,
+        dataset_kwargs=dataset_kwargs,
         **generate_kwargs,
     )
 

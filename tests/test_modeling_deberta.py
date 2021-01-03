@@ -20,7 +20,7 @@ import unittest
 import numpy as np
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -34,7 +34,7 @@ if is_torch_available():
         DebertaForSequenceClassification,
         DebertaModel,
     )
-    from transformers.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.deberta.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -148,7 +148,7 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
         def check_loss_output(self, result):
-            self.parent.assertListEqual(list(result["loss"].size()), [])
+            self.parent.assertListEqual(list(result.loss.size()), [])
 
         def create_and_check_deberta_model(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -160,11 +160,8 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
             sequence_output = model(input_ids, token_type_ids=token_type_ids)[0]
             sequence_output = model(input_ids)[0]
 
-            result = {
-                "sequence_output": sequence_output,
-            }
             self.parent.assertListEqual(
-                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(sequence_output.size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
 
         def create_and_check_deberta_for_sequence_classification(
@@ -174,14 +171,8 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
             model = DebertaForSequenceClassification(config)
             model.to(torch_device)
             model.eval()
-            loss, logits = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
-            )
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
-            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+            self.parent.assertListEqual(list(result.logits.size()), [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
         def prepare_config_and_inputs_for_common(self):
@@ -236,6 +227,8 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class DebertaModelIntegrationTest(unittest.TestCase):
     @unittest.skip(reason="Model not available yet")
     def test_inference_masked_lm(self):
@@ -247,7 +240,6 @@ class DebertaModelIntegrationTest(unittest.TestCase):
         np.random.seed(0)
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
-        DebertaModel.base_model_prefix = "bert"
         model = DebertaModel.from_pretrained("microsoft/deberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -257,17 +249,3 @@ class DebertaModelIntegrationTest(unittest.TestCase):
             [[[-0.0218, -0.6641, -0.3665], [-0.3907, -0.4716, -0.6640], [0.7461, 1.2570, -0.9063]]]
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4), f"{output[:, :3, :3]}")
-
-    @slow
-    def test_inference_classification_head(self):
-        random.seed(0)
-        np.random.seed(0)
-        torch.manual_seed(0)
-        torch.cuda.manual_seed_all(0)
-        model = DebertaForSequenceClassification.from_pretrained("microsoft/deberta-base")
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 2))
-        self.assertEqual(output.shape, expected_shape)
-        expected_tensor = torch.tensor([[0.0884, -0.1047]])
-        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4), f"{output}")

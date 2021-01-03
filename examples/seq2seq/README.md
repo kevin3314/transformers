@@ -1,8 +1,24 @@
-## Sequence to Sequence
+<!---
+Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+## Sequence to Sequence Training and Evaluation
 
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
-Please tag @sshleifer with any issues/unexpected behaviors, or send a PR!
-For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
+Please tag @patil-suraj with any issues/unexpected behaviors, or send a PR!
+For deprecated `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 
 ### Supported Architectures
 
@@ -12,14 +28,14 @@ For `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
 - `MBartForConditionalGeneration`
 - `FSMTForConditionalGeneration`
 - `T5ForConditionalGeneration`
-    
 
 ## Datasets
 
-#### XSUM:
+#### XSUM
+
 ```bash
 cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/xsum.tar.gz
+wget https://cdn-datasets.huggingface.co/summarization/xsum.tar.gz
 tar -xzvf xsum.tar.gz
 export XSUM_DIR=${PWD}/xsum
 ```
@@ -27,32 +43,46 @@ this should make a directory called `xsum/` with files like `test.source`.
 To use your own data, copy that files format. Each article to be summarized is on its own line.
 
 #### CNN/DailyMail
+
 ```bash
 cd examples/seq2seq
-wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm_v2.tgz
+wget https://cdn-datasets.huggingface.co/summarization/cnn_dm_v2.tgz
 tar -xzvf cnn_dm_v2.tgz  # empty lines removed
 mv cnn_cln cnn_dm
 export CNN_DIR=${PWD}/cnn_dm
 ```
 this should make a directory called `cnn_dm/` with 6 files.
 
-#### WMT16 English-Romanian Translation Data:
+#### WMT16 English-Romanian Translation Data
+
 download with this command:
 ```bash
-wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_ro.tar.gz
+wget https://cdn-datasets.huggingface.co/translation/wmt_en_ro.tar.gz
 tar -xzvf wmt_en_ro.tar.gz
 export ENRO_DIR=${PWD}/wmt_en_ro
 ```
 this should make a directory called `wmt_en_ro/` with 6 files.
 
-#### WMT English-German:
+#### WMT English-German
+
 ```bash
-wget https://s3.amazonaws.com/datasets.huggingface.co/translation/wmt_en_de.tgz
+wget https://cdn-datasets.huggingface.co/translation/wmt_en_de.tgz
 tar -xzvf wmt_en_de.tgz
 export DATA_DIR=${PWD}/wmt_en_de
 ```
 
-#### Private Data
+#### FSMT datasets (wmt)
+
+Refer to the scripts starting with `eval_` under:
+https://github.com/huggingface/transformers/tree/master/scripts/fsmt
+
+#### Pegasus (multiple datasets)
+
+Multiple eval datasets are available for download from: 
+https://github.com/stas00/porting/tree/master/datasets/pegasus
+
+
+#### Your Data
 
 If you are using your own data, it must be formatted as one directory with 6 files:
 ```
@@ -64,6 +94,10 @@ test.source
 test.target
 ```
 The `.source` files are the input, the `.target` files are the desired output.
+
+### Potential issues
+
+- native AMP (`--fp16` and no apex) may lead to a huge memory leak and require 10x gpu memory. This has been fixed in pytorch-nightly and the minimal official version to have this fix will be pytorch-1.7.1. Until then if you have to use mixed precision please use AMP only with pytorch-nightly or NVIDIA's apex. Reference: https://github.com/huggingface/transformers/issues/8403
 
 
 ### Tips and Tricks
@@ -94,132 +128,42 @@ Datasets: `LegacySeq2SeqDataset` will be used for all tokenizers without a `prep
 Future work/help wanted: A new dataset to support multilingual tasks.
 
 
-### Finetuning Scripts
-All finetuning bash scripts call finetune.py (or distillation.py) with reasonable command line arguments. They usually require extra command line arguments to work.
-
-To see all the possible command line options, run:
-
-```bash
- ./finetune.py --help 
-```
-
-### Finetuning Training Params
-
-To override the pretrained model's training params, you can pass them to `./finetune.sh`:
-
-```bash
-./finetune.sh \
-    [...]
-    --encoder_layerdrop 0.1 \
-    --decoder_layerdrop 0.1 \
-    --dropout 0.1 \
-    --attention_dropout 0.1 \
-```
-
-### Summarization Finetuning
-Run/modify `finetune.sh`
-
-The following command should work on a 16GB GPU:
-```bash
-./finetune.sh \
-    --data_dir $XSUM_DIR \
-    --train_batch_size=1 \
-    --eval_batch_size=1 \
-    --output_dir=xsum_results \
-    --num_train_epochs 6 \
-    --model_name_or_path facebook/bart-large
-```
-
-There is a starter finetuning script for pegasus at `finetune_pegasus_xsum.sh`.
-
-### Translation Finetuning
-
-First, follow the wmt_en_ro download instructions.
-Then you can finetune mbart_cc25 on english-romanian with the following command.
-**Recommendation:** Read and potentially modify the fairly opinionated defaults in `train_mbart_cc25_enro.sh` script before running it.
-
-Best performing command:
-```bash
-# optionally
-export ENRO_DIR='wmt_en_ro' # Download instructions above
-# export WANDB_PROJECT="MT" # optional
-export MAX_LEN=128
-export BS=4
-./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --label_smoothing 0.1 --fp16_opt_level=O1 --logger_name wandb --sortish_sampler
-```
-This should take < 6h/epoch on a 16GB v100 and achieve test BLEU above 26
-To get results in line with fairseq, you need to do some postprocessing. (see `romanian_postprocessing.md`)
-
-MultiGPU command
-(using 8 GPUS as an example)
-```bash
-export ENRO_DIR='wmt_en_ro' # Download instructions above
- # export WANDB_PROJECT="MT" # optional
-export MAX_LEN=128
-export BS=4
-./train_mbart_cc25_enro.sh --output_dir enro_finetune_baseline --gpus 8 --logger_name wandb
-```
-### Finetuning Outputs
-As you train, `output_dir` will be filled with files, that look kind of like this (comments are mine).
-Some of them are metrics, some of them are checkpoints, some of them are metadata. Here is a quick tour:
-
-```bash
-output_dir
-├── best_tfmr  # this is a huggingface checkpoint generated by save_pretrained. It is the same model as the PL .ckpt file below
-│   ├── config.json
-│   ├── merges.txt
-│   ├── pytorch_model.bin
-│   ├── special_tokens_map.json
-│   ├── tokenizer_config.json
-│   └── vocab.json
-├── git_log.json   # repo, branch, and commit hash
-├── val_avg_rouge2=0.1984-step_count=11.ckpt  # this is a pytorch lightning checkpoint associated with the best val score. (it will be called BLEU for MT)
-├── metrics.json  # new validation metrics will continually be appended to this
-├── student  # this is a huggingface checkpoint generated by SummarizationDistiller. It is the student before it gets finetuned.
-│   ├── config.json
-│   └── pytorch_model.bin
-├── test_generations.txt
-# ^^ are the summaries or translations produced by your best checkpoint on the test data. Populated when training is done
-├── test_results.txt  # a convenience file with the test set metrics. This data is also in metrics.json['test']
-├── hparams.pkl  # the command line args passed after some light preprocessing. Should be saved fairly quickly.
-```
-After training, you can recover the best checkpoint by running
-```python
-from transformers import AutoModelForSeq2SeqLM
-model = AutoModelForSeq2SeqLM.from_pretrained(f'{output_dir}/best_tfmr')
-```
-
 ### Fine-tuning using Seq2SeqTrainer
-To use `Seq2SeqTrainer` for fine-tuning you should use the `finetune_trainer.py` script. It subclasses `Trainer` to extend it for seq2seq training. Except the `Trainer` releated `TrainingArguments`, it shares the same argument names as that of `finetune.py` file. One notable difference is that, calculating generative metrics (BLEU, ROUGE) is optional and is controlled using the `--predict_with_generate` argument, set this argument to calculate BLEU and ROUGE metrics.
+To use `Seq2SeqTrainer` for fine-tuning you should use the `finetune_trainer.py` script. It subclasses `Trainer` to extend it for seq2seq training. Except the `Trainer`-related `TrainingArguments`, it shares the same argument names as that of `finetune.py` file. One notable difference is that calculating generative metrics (BLEU, ROUGE) is optional and is controlled using the `--predict_with_generate` argument.
 
-With PyTorch 1.6+ it'll automatically use `native AMP` when `--fp16` is set. 
+With PyTorch 1.6+ it'll automatically use `native AMP` when `--fp16` is set.
 
 To see all the possible command line options, run:
 
 ```bash
-./builtin_trainer/finetune.sh --help # This calls python finetune_trainer.py --help
+python finetune_trainer.py --help
+```
+
+For multi-gpu training use `torch.distributed.launch`, e.g. with 2 gpus:
+```bash
+python -m torch.distributed.launch --nproc_per_node=2  finetune_trainer.py ...
 ```
 
 **At the moment, `Seq2SeqTrainer` does not support *with teacher* distillation.**
 
-All `Seq2SeqTrainer` based fine-tuning scripts are included in the `builtin_trainer` directory.
+All `Seq2SeqTrainer`-based fine-tuning scripts are included in the `builtin_trainer` directory.
 
 #### TPU Training
 `Seq2SeqTrainer` supports TPU training with few caveats
-1. As `generate` method does not work on TPU at the moment, `predict_with_generate` can not be used. You should use `--prediction_loss_only` to only calculate loss, and do not set `--do_predict` and `--predict_with_generate`.
-2. All sequences should be padded to be of equal length otherwise it leads to extremely slow training. (`finetune_trainer.py` does this automatically when running on TPU.)
+1. As `generate` method does not work on TPU at the moment, `predict_with_generate` cannot be used. You should use `--prediction_loss_only` to only calculate loss, and do not set `--do_predict` and `--predict_with_generate`.
+2. All sequences should be padded to be of equal length to avoid extremely slow training. (`finetune_trainer.py` does this automatically when running on TPU.)
 
-We provide a very simple launcher script named `xla_spawn.py` that lets you run our example scripts on multiple TPU cores without any boilerplate. Just pass a --num_cores flag to this script, then your regular training script with its arguments (this is similar to the torch.distributed.launch helper for torch.distributed).
+We provide a very simple launcher script named `xla_spawn.py` that lets you run our example scripts on multiple TPU cores without any boilerplate. Just pass a `--num_cores` flag to this script, then your regular training script with its arguments (this is similar to the `torch.distributed.launch` helper for `torch.distributed`).
 
 `builtin_trainer/finetune_tpu.sh` script provides minimal arguments needed for TPU training.
 
-Following command fine-tunes `sshleifer/student_marian_en_ro_6_3` on TPU V3-8 and should complete one epoch in ~5-6 mins.
+The following command fine-tunes `sshleifer/student_marian_en_ro_6_3` on TPU V3-8 and should complete one epoch in ~5-6 mins.
 
 ```bash
 ./builtin_trainer/train_distil_marian_enro_tpu.sh
 ```
 
-### Evaluation Commands
+## Evaluation Commands
 
 To create summaries for each article in dataset, we use `run_eval.py`, here are a few commands that run eval for different tasks and models.
 If 'translation' is in your task name, the computed metric will be BLEU. Otherwise, ROUGE will be used.
@@ -259,12 +203,12 @@ export DATA_DIR=cnn_dm
     --score_path cnn_rouge.json \
     --task summarization \
     --n_obs 100 \
-    --device cuda \
-    --max_source_length 1024 \
-    --max_target_length 56 \
+
+th 56 \
     --fp16 \
     --bs 32
 ```
+
 ### Multi-GPU Evaluation
 here is a command to run xsum evaluation on 8 GPUS. It is more than linearly faster than run_eval.py in some cases 
 because it uses SortishSampler to minimize padding. You can also use it on 1 GPU. `data_dir` must have 
@@ -342,47 +286,6 @@ stas/wmt19-en-ru data/en-ru/val.source data/en-ru/test_translations.txt --refere
 If you pass `--info "some experiment-specific info"` it will get printed before the results table - this is useful for scripting and multiple runs, so one can tell the different sets of results from each other.
 
 
-### DistilBART
-![DBART](https://huggingface.co/front/thumbnails/distilbart_large.png)
-
-For the CNN/DailyMail dataset, (relatively longer, more extractive summaries), we found a simple technique that works:
-you just copy alternating layers from `bart-large-cnn` and finetune more on the same data.
-
-For the XSUM dataset, that didn’t work as well so we used that same initialization strategy followed by a combination of Distillbert’s ce_loss and the hidden states MSE loss used in the tinybert paper.
-
-You can see the performance tradeoffs of model sizes [here](https://docs.google.com/spreadsheets/d/1EkhDMwVO02m8jCD1cG3RoFPLicpcL1GQHTQjfvDYgIM/edit#gid=0).
-and more granular timing results [here](https://docs.google.com/spreadsheets/d/1EkhDMwVO02m8jCD1cG3RoFPLicpcL1GQHTQjfvDYgIM/edit#gid=1753259047&range=B2:I23).
-
-#### No Teacher Distillation
-To run the simpler distilbart-cnn style distillation all you need is data, a GPU, and a properly initialized student.
-You don't even need `distillation.py`.
-
-Some [un-finetuned students](https://huggingface.co/models?search=sshleifer%2Fstudent) are available for replication purposes.
-They are initialized by copying layers from the associated `bart-large-{cnn|xsum}` teacher using `--init_strategy alternate`. (You can read about that in `initialization_utils.py`)
-The command that produced `sshleifer/distilbart-cnn-12-6` is
-```bash
-./train_distilbart_cnn.sh
-```
-runtime: 6H on NVIDIA RTX 24GB GPU
-
-*Note*: You can get the same simple distillation logic by using `./run_distiller.sh --no_teacher` followed by identical arguments as the ones in `train_distilbart_cnn.sh`.
-If you are using `wandb` and comparing the two distillation methods, using this entry point will make your logs consistent,
-because you will have the same hyperparameters logged in every run.
-
-#### With a teacher (Intermediate Supervision)
-*Note* only BART variants are supported
-
-In this method, we use try to enforce that the student and teacher produce similar encoder_outputs, logits, and hidden_states using `BartSummarizationDistiller`.
-This is how `sshleifer/distilbart-xsum*` checkpoints were produced.
-
-The command that produced `sshleifer/distilbart-xsum-12-6` is:
-
-```bash
-./train_distilbart_xsum.sh --logger_name wandb --gpus 1
-```
-
-runtime: 13H on V-100 16GB GPU.
-
 ### Contributing
 - follow the standard contributing guidelines and code of conduct.
 - add tests to `test_seq2seq_examples.py`
@@ -391,8 +294,19 @@ runtime: 13H on V-100 16GB GPU.
 pytest examples/seq2seq/
 ```
 
+### Converting pytorch-lightning checkpoints
+pytorch lightning ``-do_predict`` often fails, after you are done training, the best way to evaluate your model is to convert it.
 
-## Experimental Features 
+This should be done for you, with a file called `{save_dir}/best_tfmr`. 
+
+If that file doesn't exist but you have a lightning `.ckpt` file, you can run
+```bash
+python convert_pl_checkpoint_to_hf.py PATH_TO_CKPT  randomly_initialized_hf_model_path save_dir/best_tfmr
+```
+Then either `run_eval` or `run_distributed_eval` with `save_dir/best_tfmr` (see previous sections)
+
+
+# Experimental Features 
 These features are harder to use and not always useful.
 
 ###  Dynamic Batch Size for MT

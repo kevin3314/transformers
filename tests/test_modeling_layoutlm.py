@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Microsoft Research Asia LayoutLM Team Authors.
+# Copyright 2018 The Microsoft Research Asia LayoutLM Team Authors, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, require_torch_and_cuda, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -125,7 +125,6 @@ class LayoutLMModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
 
         return config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -200,6 +199,12 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_model_various_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        for type in ["absolute", "relative_key", "relative_key_query"]:
+            config_and_inputs[0].position_embedding_type = type
+            self.model_tester.create_and_check_model(*config_and_inputs)
+
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
@@ -234,6 +239,6 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
         """Test loss/gradients same as reference implementation, for example."""
         pass
 
-    @require_torch_and_cuda
+    @require_torch_gpu
     def test_large_inputs_in_fp16_dont_cause_overflow(self):
         pass
