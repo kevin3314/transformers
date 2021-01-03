@@ -231,6 +231,7 @@ if is_sentencepiece_available():
     from .models.camembert import CamembertTokenizer
     from .models.marian import MarianTokenizer
     from .models.mbart import MBartTokenizer
+    from .models.bart_spm import BartSPMTokenizer
     from .models.mt5 import MT5Tokenizer
     from .models.pegasus import PegasusTokenizer
     from .models.reformer import ReformerTokenizer
