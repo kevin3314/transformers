@@ -148,6 +148,7 @@ _import_structure = {
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
+    "models.bibart": ["BiBartTokenizer"],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -257,6 +258,7 @@ if is_sentencepiece_available():
     _import_structure["models.albert"].append("AlbertTokenizer")
     _import_structure["models.barthez"].append("BarthezTokenizer")
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
+    _import_structure["models.bibart"].append("BiBartTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -1374,6 +1376,7 @@ if TYPE_CHECKING:
         from .models.albert import AlbertTokenizer
         from .models.barthez import BarthezTokenizer
         from .models.bert_generation import BertGenerationTokenizer
+        from .models.bibart import BiBartTokenizer
         from .models.camembert import CamembertTokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBartTokenizer
