@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 T5 Authors and HuggingFace Inc. team.
+# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,227 +11,135 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License.
-""" Tokenization class for model T5."""
+# limitations under the License
+""" Tokenization classes for XLM-RoBERTa model."""
 
 
 import os
-import re
-import warnings
 from shutil import copyfile
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-from ...file_utils import add_start_docstrings
-from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
+import sentencepiece as spm
+
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to file names for serializing Tokenizer instances
-####################################################
-VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+SPIECE_UNDERLINE = "▁"
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to pretrained vocabulary URL for all the model shortcut names.
-####################################################
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
+
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+        "xlm-roberta-base": "https://huggingface.co/xlm-roberta-base/resolve/main/sentencepiece.bpe.model",
+        "xlm-roberta-large": "https://huggingface.co/xlm-roberta-large/resolve/main/sentencepiece.bpe.model",
+        "xlm-roberta-large-finetuned-conll02-dutch": "https://huggingface.co/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/sentencepiece.bpe.model",
+        "xlm-roberta-large-finetuned-conll02-spanish": "https://huggingface.co/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/sentencepiece.bpe.model",
+        "xlm-roberta-large-finetuned-conll03-english": "https://huggingface.co/xlm-roberta-large-finetuned-conll03-english/resolve/main/sentencepiece.bpe.model",
+        "xlm-roberta-large-finetuned-conll03-german": "https://huggingface.co/xlm-roberta-large-finetuned-conll03-german/resolve/main/sentencepiece.bpe.model",
     }
 }
 
-####################################################
-# Mapping from model shortcut names to max length of inputs
-####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "t5-small": 512,
-    "t5-base": 512,
-    "t5-large": 512,
-    "t5-3b": 512,
-    "t5-11b": 512,
+    "xlm-roberta-base": 512,
+    "xlm-roberta-large": 512,
+    "xlm-roberta-large-finetuned-conll02-dutch": 512,
+    "xlm-roberta-large-finetuned-conll02-spanish": 512,
+    "xlm-roberta-large-finetuned-conll03-english": 512,
+    "xlm-roberta-large-finetuned-conll03-german": 512,
 }
 
 
 class BartSPMTokenizer(PreTrainedTokenizer):
     """
-    Construct a T5 tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
+    Copy from XLMRobertaTokenizer
 
+    Adapted from :class:`~transformers.RobertaTokenizer` and class:`~transformers.XLNetTokenizer`. Based on
+    `SentencePiece <https://github.com/google/sentencepiece>`__.
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
-
     Args:
         vocab_file (:obj:`str`):
-            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
+            Path to the vocabulary file.
         bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+            .. note::
+                When building a sequence using special tokens, this is not the token that is used for the beginning of
+                sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
-
             .. note::
-
-                When building a sequence using special tokens, this is not the token that is used for the end
-                of sequence. The token used is the :obj:`sep_token`.
+                When building a sequence using special tokens, this is not the token that is used for the end of
+                sequence. The token used is the :obj:`sep_token`.
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-
-    Note:
-        According to fairseq, token2idx mapping is:
-        <s>   → 0
-        <pad> → 1
-        </s>  → 2
-        <unk> → 3
-        ▁の  -> 4
-
-        According to sentencepiece, token2idx mapping is:
-        <unk> → 0
-        <s> → 1
-        </s> → 2
-        ▁の -> 3
-
-        This must be handled.
-        Currently, encode method works wrongly. Use convert_ids_to_tokens/tokens_to_ids
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
+        additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
+            Additional special tokens used by the tokenizer.
+    Attributes: sp_model (:obj:`SentencePieceProcessor`): The `SentencePiece` processor that is used for every
+    conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
-    id_spm2fairseq_map = {
-        0: 3,
-        1: 0,
-        2: 2
-    }
-    id_fairseq2spm_map = {value: key for key, value in id_spm2fairseq_map.items()}
-    # For now, map <pad> to <unk>
-    id_fairseq2spm_map[1] = 0
 
     def __init__(
         self,
         vocab_file,
         bos_token="<s>",
         eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        pad_id=1,
+        mask_token="<mask>",
         **kwargs
     ):
-
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
             pad_token=pad_token,
+            mask_token=mask_token,
             **kwargs,
         )
 
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use T5Tokenizer:"
-                "https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
-
-        self.vocab_file = vocab_file
-        self._pad_id = pad_id
-
         self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(vocab_file)
+        self.sp_model.Load(str(vocab_file))
+        self.vocab_file = vocab_file
 
-    @property
-    def vocab_size(self):
-        return self.sp_model.get_piece_size()
+        # Original fairseq vocab and spm vocab must be "aligned":
+        # Vocab    |    0    |    1    |   2    |    3    |  4  |  5  |  6  |   7   |   8   |  9
+        # -------- | ------- | ------- | ------ | ------- | --- | --- | --- | ----- | ----- | ----
+        # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | ',' | '.' | '▁' | 's'   | '▁de' | '-'
+        # spm      | '<unk>' | '<s>'   | '</s>' | ','     | '.' | '▁' | 's' | '▁de' | '-'   | '▁a'
 
-    @property
-    def pad_id(self):
-        return self._pad_id
+        # Mimic fairseq token-to-id alignment for the first 4 token
+        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
 
-    def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
+        # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
+        self.fairseq_offset = 1
 
-    def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
-
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-        if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
-        # normal case: some special tokens
-        if token_ids_1 is None:
-            return ([0] * len(token_ids_0)) + [1]
-        return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
-
-    def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
-        """Do not add eos again if user already added it."""
-        if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
-            warnings.warn(
-                f"This sequence already has {self.eos_token}. In future versions this behavior may lead to duplicated eos tokens being added."
-            )
-            return token_ids
-        else:
-            return token_ids + [self.eos_token_id]
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A sequence has the following format:
-
-        - single sequence: ``X </s>``
-        - pair of sequences: ``A </s> B </s>``
-
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
-        """
-        token_ids_0 = self._add_eos_if_not_present(token_ids_0)
-        if token_ids_1 is None:
-            return token_ids_0
-        else:
-            token_ids_1 = self._add_eos_if_not_present(token_ids_1)
-            return token_ids_0 + token_ids_1
+        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
+        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -240,102 +148,124 @@ class BartSPMTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use T5Tokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text, sample=False):
-        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        if not sample:
-            pieces = self.sp_model.EncodeAsPieces(text)
-        else:
-            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
-        return pieces
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. An XLM-RoBERTa sequence has the following format:
+        - single sequence: ``<s> X </s>``
+        - pair of sequences: ``<s> A </s></s> B </s>``
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+        Returns:
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+
+        if token_ids_1 is None:
+            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+        cls = [self.cls_token_id]
+        sep = [self.sep_token_id]
+        return cls + token_ids_0 + sep + sep + token_ids_1 + sep
+
+    def get_special_tokens_mask(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
+        """
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer ``prepare_for_model`` method.
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the token list is already formatted with special tokens for the model.
+        Returns:
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+        """
+
+        if already_has_special_tokens:
+            if token_ids_1 is not None:
+                raise ValueError(
+                    "You should not supply a second sequence if the provided sequence of "
+                    "ids is already formatted with special tokens for the model."
+                )
+            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+
+        if token_ids_1 is None:
+            return [1] + ([0] * len(token_ids_0)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. XLM-RoBERTa does
+        not make use of token type ids, therefore a list of zeros is returned.
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+        Returns:
+            :obj:`List[int]`: List of zeros.
+        """
+
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+    @property
+    def vocab_size(self):
+        return len(self.sp_model) + self.fairseq_offset + 1  # Add the <mask> token
+
+    def get_vocab(self):
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
+    def _tokenize(self, text):
+        return self.sp_model.EncodeAsPieces(text)
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-        # Handle pad
-        if token == self.pad_token:
-            return self.pad_id
-        idx = self.sp_model.piece_to_id(token)
-        # If not included in map, then increment
-        return self.id_spm2fairseq_map.get(idx, idx + 1)
+        if token in self.fairseq_tokens_to_ids:
+            return self.fairseq_tokens_to_ids[token]
+        spm_id = self.sp_model.PieceToId(token)
+
+        # Need to return unknown token if the SP model returned 0
+        return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        fairseq_idx = self.id_fairseq2spm_map.get(index, index - 1)
-        token = self.sp_model.IdToPiece(fairseq_idx)
-        return token
+        if index in self.fairseq_ids_to_tokens:
+            return self.fairseq_ids_to_tokens[index]
+        return self.sp_model.IdToPiece(index - self.fairseq_offset)
 
     def convert_tokens_to_string(self, tokens):
-        """ Converts a sequence of tokens (string) in a single string. """
-        out_string = self.sp_model.decode_pieces(tokens)
+        """Converts a sequence of tokens (strings for sub-words) in a single string."""
+        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
-
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        padding: str = "longest",
-        return_tensors: str = None,
-        truncation: bool = True,
-        **kwargs,
-    ) -> BatchEncoding:
-        if max_length is None:
-            max_length = self.max_len
-        model_inputs = self(
-            src_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            padding=padding,
-            truncation=truncation,
-            **kwargs,
-        )
-        if tgt_texts is None:
-            return model_inputs
-        # Process tgt_texts
-        if max_target_length is None:
-            max_target_length = max_length
-        labels_and_decoder_mask = self(
-            tgt_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_target_length,
-            truncation=truncation,
-            **kwargs,
-        )
-        model_inputs["labels"] = labels_and_decoder_mask["input_ids"]
-        return model_inputs

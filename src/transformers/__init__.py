@@ -136,6 +136,7 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
+    "models.bart_spm": ["BartSPMTokenizer"],
     "models.barthez": [],
     "models.bert": [
         "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
